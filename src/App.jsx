@@ -217,7 +217,6 @@ function buildGame(cfg) {
     id: uid(),
     startedAt: Date.now(),
     startingLife: cfg.life,
-    rollSkipped: false,
     players,
     monarchId: null,
     firstPlayerId: null,
@@ -489,14 +488,10 @@ function gameReducer(state, a) {
       return { ...state, undo, history: capHist(hist), firstPlayerId: a.playerId };
     }
 
-    case "SKIP_ROLL":
-      return { ...state, rollSkipped: true };
-
     case "RESET":
       return {
         ...state,
         startedAt: Date.now(),
-        rollSkipped: false,
         monarchId: null,
         firstPlayerId: null,
         timer: { accum: 0, runningSince: a.ts },
@@ -1745,12 +1740,9 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
     optionsFor: null,
     menu: false,
     history: false,
+    stats: false,
     confirm: null,
-    roll:
-      !game.firstPlayerId && !game.rollSkipped &&
-      !game.history.some((h) => h.kind === "life" || h.kind === "cmd")
-        ? "prompt"
-        : null,
+    roll: null,
   }));
   const [spot, setSpot] = useState(null);
   const rollTimer = useRef(null);
@@ -1790,6 +1782,12 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   const turns = game.turns || { enabled: false };
   // Tick once per second for the hub timer and the active-turn chip.
   const now = useNow(true);
+
+  // Offer the first-player roll only while the game is untouched — no modal,
+  // just a hub button that retires itself once play begins.
+  const freshRoll =
+    !game.firstPlayerId &&
+    !game.history.some((h) => h.kind === "life" || h.kind === "cmd");
 
   const lastEntry = game.history[game.history.length - 1];
   const freshFor = (pid) =>
@@ -1872,6 +1870,15 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           the panels' corner controls */}
       <div className="shrink-0 flex justify-center">
         <div className="flex items-center gap-1 p-1 rounded-full bg-black/70 ring-1 ring-white/15">
+        {freshRoll && (
+          <button
+            onClick={runRoll}
+            aria-label="Roll for first player"
+            className="h-11 px-3 rounded-full bg-amber-300/90 text-slate-950 flex items-center gap-1.5 font-bold text-sm"
+          >
+            <Dices size={18} /> Roll
+          </button>
+        )}
         <button
           onClick={() => dispatch({ type: "UNDO" })}
           disabled={!game.undo.length}
@@ -1916,26 +1923,6 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
       {renderBank(near, false)}
 
       {/* First-player roll flow */}
-      {ui.roll === "prompt" && (
-        <Modal onClose={() => { dispatch({ type: "SKIP_ROLL" }); setUi((u) => ({ ...u, roll: null })); }}>
-          <div className="p-5 text-center">
-            <Dices size={32} className="mx-auto text-amber-300 mb-2" />
-            <div className="text-lg font-semibold mb-4">Decide who goes first?</div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { dispatch({ type: "SKIP_ROLL" }); setUi((u) => ({ ...u, roll: null })); }}
-                className="flex-1 h-12 rounded-xl bg-white/5 ring-1 ring-white/15 font-semibold"
-              >
-                Skip
-              </button>
-              <button onClick={runRoll}
-                className="flex-1 h-12 rounded-xl bg-amber-300 text-slate-950 font-bold">
-                Roll
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
       {ui.roll === "running" && (
         <div className="fixed inset-0 z-40 flex items-end justify-center pb-10 pointer-events-auto">
           <div className="px-4 py-2 rounded-full bg-black/70 ring-1 ring-amber-300/40 text-amber-200 text-sm font-semibold">
@@ -2003,7 +1990,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           game={game}
           dispatch={dispatch}
           onStats={() => setUi((u) => ({ ...u, menu: false, stats: true }))}
-          onRoll={() => setUi((u) => ({ ...u, menu: false, roll: "prompt" }))}
+          onRoll={runRoll}
           onReset={() =>
             setUi((u) => ({
               ...u, menu: false,
