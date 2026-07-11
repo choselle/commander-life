@@ -1165,14 +1165,16 @@ function MiniCell({ o, viewer, big, onOpenCmd, onOpenOptions }) {
 
 function PlayerPanel({
   p, flipped, cols, spotlight, isFirst, isMonarch, isTurn, turnMs,
-  freshDelta, seatRows, counterChips,
+  freshDelta, seatRows, counterChips, phone,
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
   const pal = palOf(p.color);
   const realCmds = p.commanders.filter((c) => !c.placeholder);
   const primaryCmd = realCmds.find((c) => c.art) || realCmds[0];
-  const lifeSize =
-    cols === 1 ? "min(21vh, 24vw, 10rem)"
+  // Phone rows are short and wide; everything else keys off column count.
+  const lifeSize = phone
+    ? "min(11vh, 21vw, 6rem)"
+    : cols === 1 ? "min(21vh, 24vw, 10rem)"
     : cols === 2 ? "min(16vh, 15vw, 8.5rem)"
     : "min(14vh, 10.5vw, 7rem)";
 
@@ -1248,7 +1250,7 @@ function PlayerPanel({
                     key={o.id}
                     o={o}
                     viewer={p}
-                    big={cols < 3}
+                    big={!phone && cols < 3}
                     onOpenCmd={onOpenCmd}
                     onOpenOptions={onOpenOptions}
                   />
@@ -1783,6 +1785,10 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   // Tick once per second for the hub timer and the active-turn chip.
   const now = useNow(true);
 
+  // Narrow portrait = a phone in one player's hand: stack unrotated rows and
+  // flatten the seat map to a strip. Anything wider keeps the tablet layout.
+  const phone = vp.w < 520 && vp.h > vp.w;
+
   // Offer the first-player roll only while the game is untouched — no modal,
   // just a hub button that retires itself once play begins.
   const freshRoll =
@@ -1821,15 +1827,16 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
     tick();
   };
 
-  const renderBank = (players, flipped) => {
+  const renderBank = (players, flipped, phoneMode = false) => {
     const cols = players.length;
     return (
-      <div className="flex-1 flex gap-1.5 min-h-0">
+      <div className={`flex-1 flex ${phoneMode ? "flex-col" : ""} gap-1.5 min-h-0`}>
         {players.map((p) => (
           <PlayerPanel
             key={p.id}
             p={p}
-            flipped={flipped}
+            phone={phoneMode}
+            flipped={phoneMode ? false : flipped}
             cols={cols}
             spotlight={spot === p.id}
             isFirst={game.firstPlayerId === p.id}
@@ -1837,7 +1844,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
             isTurn={turns.enabled && turns.activeId === p.id}
             turnMs={turns.startedTs ? Math.max(0, now - turns.startedTs) : 0}
             freshDelta={freshFor(p.id)}
-            seatRows={seatRows}
+            seatRows={phoneMode ? [game.players] : seatRows}
             counterChips={counterChipsFor(p)}
             onLife={(d) => adjustLife(p.id, d)}
             onOpenCmd={() => setUi((u) => ({ ...u, cmdFor: p.id }))}
@@ -1864,10 +1871,10 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
 
   return (
     <div className="h-full flex flex-col gap-1.5 p-1.5">
-      {renderBank(far, true)}
+      {phone ? renderBank(game.players, false, true) : renderBank(far, true)}
 
-      {/* Center hub — its own strip between the banks so it never overlaps
-          the panels' corner controls */}
+      {/* Center hub — below the phone stack, or between the tablet banks so
+          it never overlaps the panels' corner controls */}
       <div className="shrink-0 flex justify-center">
         <div className="flex items-center gap-1 p-1 rounded-full bg-black/70 ring-1 ring-white/15">
         {freshRoll && (
@@ -1920,7 +1927,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         </div>
       </div>
 
-      {renderBank(near, false)}
+      {!phone && renderBank(near, false)}
 
       {/* First-player roll flow */}
       {ui.roll === "running" && (
@@ -1956,8 +1963,12 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         <CmdDamageSheet
           game={game}
           defenderId={ui.cmdFor}
-          seatRows={seatRows}
-          flip={farIds.has(ui.cmdFor)}
+          seatRows={
+            phone
+              ? game.players.filter((pl) => pl.id !== ui.cmdFor).map((pl) => [pl])
+              : seatRows
+          }
+          flip={!phone && farIds.has(ui.cmdFor)}
           applyToLife={prefs.applyToLife}
           setApplyToLife={(v) => setPrefs((p) => ({ ...p, applyToLife: v }))}
           dispatch={dispatch}
@@ -1968,7 +1979,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         <OptionsSheet
           player={optionsPlayer}
           isMonarch={game.monarchId === optionsPlayer.id}
-          flip={farIds.has(optionsPlayer.id)}
+          flip={!phone && farIds.has(optionsPlayer.id)}
           onMonarch={() =>
             dispatch({
               type: "MONARCH",
