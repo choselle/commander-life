@@ -1112,9 +1112,10 @@ function ArtBackground({ cmd, pal, eliminated }) {
 // the same table position as their tile, so position alone identifies them.
 // The map is rendered in screen order in every tile; the tile's own 180°
 // rotation turns it into each player's personal perspective automatically.
-function MiniCell({ o, viewer, big, onOpenCmd, onOpenOptions }) {
+function MiniCell({ o, viewer, size = "md", onOpenCmd, onOpenOptions }) {
   const opal = palOf(o.color);
-  const seg = big ? "h-14 w-18" : "h-11 w-14";
+  const seg = size === "lg" ? "h-14 w-18" : size === "sm" ? "h-9 w-12" : "h-11 w-14";
+  const num = size === "lg" ? "text-2xl" : size === "sm" ? "text-base" : "text-lg";
   if (o.id === viewer.id) {
     return (
       <button
@@ -1150,11 +1151,11 @@ function MiniCell({ o, viewer, big, onOpenCmd, onOpenOptions }) {
             )}
             <span className={`absolute inset-0 ${deadly ? "bg-rose-600/60" : "bg-black/45"}`} />
             <span
-              className={`relative ${big ? "text-2xl" : "text-lg"} font-black tabular-nums text-white flex items-center gap-0.5`}
+              className={`relative ${num} font-black tabular-nums text-white flex items-center gap-0.5`}
               style={{ textShadow: "0 1px 6px rgba(0,0,0,.95)" }}
             >
               {dmg}
-              {deadly && <Skull size={15} />}
+              {deadly && <Skull size={size === "sm" ? 12 : 15} />}
             </span>
           </span>
         );
@@ -1163,20 +1164,28 @@ function MiniCell({ o, viewer, big, onOpenCmd, onOpenOptions }) {
   );
 }
 
+// variant: "table" = rotated tabletop tile, "col" = phone-portrait row with
+// stacked content, "row" = phone-landscape row with horizontal content.
 function PlayerPanel({
   p, flipped, cols, spotlight, isFirst, isMonarch, isTurn, turnMs,
-  freshDelta, seatRows, counterChips, phone,
+  freshDelta, seatRows, counterChips, variant = "table",
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
   const pal = palOf(p.color);
   const realCmds = p.commanders.filter((c) => !c.placeholder);
   const primaryCmd = realCmds.find((c) => c.art) || realCmds[0];
   // Phone rows are short and wide; everything else keys off column count.
-  const lifeSize = phone
+  const lifeSize = variant === "col"
     ? "min(11vh, 21vw, 6rem)"
     : cols === 1 ? "min(21vh, 24vw, 10rem)"
     : cols === 2 ? "min(16vh, 15vw, 8.5rem)"
     : "min(14vh, 10.5vw, 7rem)";
+  const cellSize =
+    variant === "table" ? (cols < 3 ? "lg" : "md")
+    : variant === "col" ? "md"
+    : "sm";
+  const bigElim = variant === "table" ? cols < 3 : variant === "col";
+  const shadow = { textShadow: "0 1px 6px rgba(0,0,0,.9)" };
 
   return (
     <div
@@ -1194,7 +1203,75 @@ function PlayerPanel({
         </div>
       )}
 
-      {/* Readout — never intercepts touches */}
+      {/* Readout — never intercepts touches (except mini-map & chips) */}
+      {variant === "row" ? (
+        <div className="absolute inset-0 pointer-events-none flex items-center gap-3 pl-16 pr-14">
+          {/* Identity */}
+          <div className="flex flex-col items-start min-w-0 flex-1 gap-0.5">
+            <div className="flex items-center gap-1.5 max-w-full">
+              <span className={`h-2.5 w-2.5 rounded-full ${pal.dot} shrink-0`} />
+              <span className="text-xs uppercase tracking-widest text-white/85 truncate" style={shadow}>
+                {p.name}
+              </span>
+              {isFirst && (
+                <span className="text-[10px] font-bold text-amber-300 bg-amber-400/15 ring-1 ring-amber-300/40 rounded-full px-1.5 py-0.5 shrink-0">
+                  1st
+                </span>
+              )}
+              {isTurn && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-sky-200 bg-sky-400/15 ring-1 ring-sky-300/40 rounded-full px-1.5 py-0.5 tabular-nums shrink-0">
+                  <Hourglass size={10} /> {fmtMs(turnMs)}
+                </span>
+              )}
+            </div>
+            {realCmds.length > 0 && (
+              <div className="mtg-serif italic text-[10px] text-white/75 truncate max-w-full" style={shadow}>
+                {realCmds.map((c) => c.name).join(" · ")}
+              </div>
+            )}
+            {counterChips.length > 0 && (
+              <div className="flex flex-wrap gap-1 pointer-events-auto">
+                {counterChips.map((c) => (
+                  <button
+                    key={c.k}
+                    onClick={onOpenOptions}
+                    className={`flex items-center gap-1 h-7 px-1.5 rounded-lg ring-1 text-[10px] font-bold ${
+                      c.lethal ? "bg-rose-600/90 ring-rose-300/70" : "bg-black/55 ring-white/20"
+                    }`}
+                  >
+                    <span>{c.abbr}</span>
+                    <span className="tabular-nums">{c.v}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Life */}
+          <div className="flex items-center gap-2 shrink-0">
+            {freshDelta !== 0 && (
+              <span className={`text-base font-bold ${freshDelta > 0 ? "text-emerald-300" : "text-rose-300"}`} style={shadow}>
+                {freshDelta > 0 ? `+${freshDelta}` : freshDelta}
+              </span>
+            )}
+            <div
+              key={p.life}
+              className="mtg-pop font-black tabular-nums leading-none tracking-tight"
+              style={{ fontSize: "clamp(1.9rem, 11vh, 3rem)", textShadow: "0 3px 16px rgba(0,0,0,.9)" }}
+            >
+              {p.life}
+            </div>
+          </div>
+
+          {/* Seat strip */}
+          <div className="shrink-0 flex flex-wrap justify-end items-center gap-1 pointer-events-auto max-w-[42%]">
+            {seatRows.flat().map((o) => (
+              <MiniCell key={o.id} o={o} viewer={p} size="sm"
+                onOpenCmd={onOpenCmd} onOpenOptions={onOpenOptions} />
+            ))}
+          </div>
+        </div>
+      ) : (
       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-between py-2 px-14">
         <div className="flex items-center gap-2 max-w-full">
           <span className={`h-2.5 w-2.5 rounded-full ${pal.dot} shrink-0`} />
@@ -1250,7 +1327,7 @@ function PlayerPanel({
                     key={o.id}
                     o={o}
                     viewer={p}
-                    big={!phone && cols < 3}
+                    size={cellSize}
                     onOpenCmd={onOpenCmd}
                     onOpenOptions={onOpenOptions}
                   />
@@ -1279,6 +1356,7 @@ function PlayerPanel({
           )}
         </div>
       </div>
+      )}
 
       {/* Corner controls: crown top-left, options top-right. Commander
           damage opens from the mini-map cells. */}
@@ -1314,7 +1392,7 @@ function PlayerPanel({
             <div className="relative flex items-center justify-center">
               <span className="absolute -inset-7 rounded-full bg-rose-600/35 blur-2xl mtg-elim-pulse" />
               <Skull
-                size={cols < 3 ? 56 : 44}
+                size={bigElim ? 56 : variant === "row" ? 34 : 44}
                 className="relative text-rose-500"
                 style={{ filter: "drop-shadow(0 0 16px rgba(244,63,94,.6))" }}
               />
@@ -1322,17 +1400,19 @@ function PlayerPanel({
             <div
               className="font-black uppercase text-rose-400 tracking-[0.3em] pl-[0.3em] text-center"
               style={{
-                fontSize: cols < 3 ? "clamp(16px,2.4vw,24px)" : "clamp(13px,1.8vw,18px)",
+                fontSize: bigElim ? "clamp(16px,2.4vw,24px)" : "clamp(12px,1.8vw,18px)",
                 textShadow: "0 0 20px rgba(244,63,94,.5), 0 2px 10px rgba(0,0,0,.9)",
               }}
             >
               Eliminated
             </div>
-            <div className="text-xs uppercase tracking-widest text-white/45">{p.name}</div>
+            {variant !== "row" && (
+              <div className="text-xs uppercase tracking-widest text-white/45">{p.name}</div>
+            )}
           </div>
           <button
             onClick={onRestore}
-            className="mt-4 h-10 px-5 rounded-full bg-white/10 ring-1 ring-white/20 text-sm text-white/75"
+            className={`${variant === "row" ? "mt-1.5 h-9" : "mt-4 h-10"} px-5 rounded-full bg-white/10 ring-1 ring-white/20 text-sm text-white/75`}
           >
             Restore
           </button>
@@ -1785,9 +1865,20 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   // Tick once per second for the hub timer and the active-turn chip.
   const now = useNow(true);
 
-  // Narrow portrait = a phone in one player's hand: stack unrotated rows and
-  // flatten the seat map to a strip. Anything wider keeps the tablet layout.
+  // A phone in one player's hand: portrait stacks unrotated rows with
+  // stacked content; landscape uses short wide rows (2-up for 4+) with
+  // horizontal content. Anything larger keeps the tabletop layout.
   const phone = vp.w < 520 && vp.h > vp.w;
+  const phoneLand = vp.h < 520 && vp.w >= vp.h;
+  const anyPhone = phone || phoneLand;
+  const landRows = useMemo(() => {
+    if (!phoneLand) return [];
+    if (game.players.length <= 3) return game.players.map((p) => [p]);
+    const rows = [];
+    for (let i = 0; i < game.players.length; i += 2)
+      rows.push(game.players.slice(i, i + 2));
+    return rows;
+  }, [phoneLand, game.players]);
 
   // Offer the first-player roll only while the game is untouched — no modal,
   // just a hub button that retires itself once play begins.
@@ -1827,16 +1918,16 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
     tick();
   };
 
-  const renderBank = (players, flipped, phoneMode = false) => {
+  const renderBank = (players, flipped, variant = "table") => {
     const cols = players.length;
     return (
-      <div className={`flex-1 flex ${phoneMode ? "flex-col" : ""} gap-1.5 min-h-0`}>
+      <div className={`flex-1 flex ${variant === "col" ? "flex-col" : ""} gap-1.5 min-h-0`}>
         {players.map((p) => (
           <PlayerPanel
             key={p.id}
             p={p}
-            phone={phoneMode}
-            flipped={phoneMode ? false : flipped}
+            variant={variant}
+            flipped={variant === "table" ? flipped : false}
             cols={cols}
             spotlight={spot === p.id}
             isFirst={game.firstPlayerId === p.id}
@@ -1844,7 +1935,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
             isTurn={turns.enabled && turns.activeId === p.id}
             turnMs={turns.startedTs ? Math.max(0, now - turns.startedTs) : 0}
             freshDelta={freshFor(p.id)}
-            seatRows={phoneMode ? [game.players] : seatRows}
+            seatRows={variant === "table" ? seatRows : [game.players]}
             counterChips={counterChipsFor(p)}
             onLife={(d) => adjustLife(p.id, d)}
             onOpenCmd={() => setUi((u) => ({ ...u, cmdFor: p.id }))}
@@ -1871,7 +1962,19 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
 
   return (
     <div className="h-full flex flex-col gap-1.5 p-1.5">
-      {phone ? renderBank(game.players, false, true) : renderBank(far, true)}
+      {phoneLand ? (
+        <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+          {landRows.map((row, i) => (
+            <div key={i} className="flex-1 flex min-h-0">
+              {renderBank(row, false, "row")}
+            </div>
+          ))}
+        </div>
+      ) : phone ? (
+        renderBank(game.players, false, "col")
+      ) : (
+        renderBank(far, true)
+      )}
 
       {/* Center hub — below the phone stack, or between the tablet banks so
           it never overlaps the panels' corner controls */}
@@ -1927,7 +2030,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         </div>
       </div>
 
-      {!phone && renderBank(near, false)}
+      {!anyPhone && renderBank(near, false)}
 
       {/* First-player roll flow */}
       {ui.roll === "running" && (
@@ -1964,11 +2067,11 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           game={game}
           defenderId={ui.cmdFor}
           seatRows={
-            phone
+            anyPhone
               ? game.players.filter((pl) => pl.id !== ui.cmdFor).map((pl) => [pl])
               : seatRows
           }
-          flip={!phone && farIds.has(ui.cmdFor)}
+          flip={!anyPhone && farIds.has(ui.cmdFor)}
           applyToLife={prefs.applyToLife}
           setApplyToLife={(v) => setPrefs((p) => ({ ...p, applyToLife: v }))}
           dispatch={dispatch}
@@ -1979,7 +2082,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         <OptionsSheet
           player={optionsPlayer}
           isMonarch={game.monarchId === optionsPlayer.id}
-          flip={!phone && farIds.has(optionsPlayer.id)}
+          flip={!anyPhone && farIds.has(optionsPlayer.id)}
           onMonarch={() =>
             dispatch({
               type: "MONARCH",
