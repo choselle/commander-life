@@ -41,8 +41,16 @@ const CSS = `
 @keyframes mtgrise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 .mtg-spot{box-shadow:0 0 0 4px rgb(252 211 77),0 0 28px 6px rgb(252 211 77 / .45)}
 .mtg-crowned{box-shadow:0 0 0 3px rgb(251 191 36 / .95),0 0 22px 4px rgb(251 191 36 / .4)}
+.mtg-stamp{animation:mtgstamp .5s cubic-bezier(.2,1.4,.4,1)}
+@keyframes mtgstamp{
+  0%{transform:scale(2.6) rotate(-12deg);opacity:0}
+  55%{transform:scale(.92) rotate(2deg);opacity:1}
+  100%{transform:scale(1) rotate(0)}
+}
+.mtg-elim-pulse{animation:mtgelimpulse 3.2s ease-in-out infinite}
+@keyframes mtgelimpulse{0%,100%{opacity:.25}50%{opacity:.6}}
 @media (prefers-reduced-motion: reduce){
-  .mtg-pop,.mtg-fade,.mtg-rise{animation:none}
+  .mtg-pop,.mtg-fade,.mtg-rise,.mtg-stamp,.mtg-elim-pulse{animation:none}
 }
 `;
 
@@ -1260,11 +1268,37 @@ function PlayerPanel({
 
       {/* Eliminated overlay */}
       {p.eliminated && (
-        <div className="absolute inset-0 z-30 bg-black/70 flex flex-col items-center justify-center gap-2">
-          <Skull size={34} className="text-slate-300" />
-          <div className="text-sm uppercase tracking-widest text-slate-300">Eliminated</div>
-          <button onClick={onRestore}
-            className="mt-1 h-10 px-4 rounded-full bg-white/10 ring-1 ring-white/20 text-sm">
+        <div
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center mtg-fade"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(56,0,8,.55) 0%, rgba(0,0,0,.9) 78%)",
+          }}
+        >
+          <div className="mtg-stamp flex flex-col items-center gap-1.5">
+            <div className="relative flex items-center justify-center">
+              <span className="absolute -inset-7 rounded-full bg-rose-600/35 blur-2xl mtg-elim-pulse" />
+              <Skull
+                size={cols < 3 ? 56 : 44}
+                className="relative text-rose-500"
+                style={{ filter: "drop-shadow(0 0 16px rgba(244,63,94,.6))" }}
+              />
+            </div>
+            <div
+              className="font-black uppercase text-rose-400 tracking-[0.3em] pl-[0.3em] text-center"
+              style={{
+                fontSize: cols < 3 ? "clamp(16px,2.4vw,24px)" : "clamp(13px,1.8vw,18px)",
+                textShadow: "0 0 20px rgba(244,63,94,.5), 0 2px 10px rgba(0,0,0,.9)",
+              }}
+            >
+              Eliminated
+            </div>
+            <div className="text-xs uppercase tracking-widest text-white/45">{p.name}</div>
+          </div>
+          <button
+            onClick={onRestore}
+            className="mt-4 h-10 px-5 rounded-full bg-white/10 ring-1 ring-white/20 text-sm text-white/75"
+          >
             Restore
           </button>
         </div>
