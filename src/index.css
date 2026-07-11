@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Match the app shell so orientation changes and overscroll never flash white */
+html {
+  background: #020617;
+}
