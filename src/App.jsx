@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useReducer, useMemo, useCallback } from "react";
 import {
-  Plus, Minus, X, Undo2, History, Settings, Skull,
+  Plus, Minus, X, Undo2, History, Settings, Skull, Swords,
   Dices, Search, RotateCcw, Loader2, Crown, Star, Pause, Play,
   SkipForward, Hourglass, Image as ImageIcon, Timer as TimerIcon,
   ChevronLeft, BarChart3
@@ -1164,28 +1164,169 @@ function MiniCell({ o, viewer, size = "md", onOpenCmd, onOpenOptions }) {
   );
 }
 
-// variant: "table" = rotated tabletop tile, "col" = phone-portrait row with
-// stacked content, "row" = phone-landscape row with horizontal content.
+// The phone tile: same clockwise grid as the tablet, radically simpler
+// content. Art + name + big life + monarch; commander damage and counters
+// live one tap away (swords button / chips) in the existing sheets. This is
+// deliberately separate from PlayerPanel so the two designs never share
+// layout compromises.
+function PhonePanel({
+  p, spotlight, isFirst, isMonarch, isTurn, turnMs, freshDelta,
+  counterChips, anyLethal,
+  onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
+}) {
+  const pal = palOf(p.color);
+  const realCmds = p.commanders.filter((c) => !c.placeholder);
+  const artCmd = realCmds.find((c) => c.art) || realCmds[0];
+  const shadow = { textShadow: "0 1px 6px rgba(0,0,0,.9)" };
+  return (
+    <div
+      className={`relative flex-1 min-w-0 overflow-hidden rounded-xl ring-1 ring-white/10 ${
+        spotlight ? "mtg-spot" : isMonarch ? "mtg-crowned" : ""
+      }`}
+    >
+      <ArtBackground cmd={artCmd} pal={pal} eliminated={p.eliminated} />
+
+      {!p.eliminated && (
+        <div className="absolute inset-0 flex">
+          <TapZone side="minus" pressedClass="bg-black/25" onStep={(m) => onLife(-m)} />
+          <TapZone side="plus" pressedClass="bg-white/10" onStep={(m) => onLife(m)} />
+        </div>
+      )}
+
+      {/* Readout */}
+      <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-0.5 px-11">
+        <div className="flex items-center gap-1.5 max-w-full">
+          <span className={`h-2 w-2 rounded-full ${pal.dot} shrink-0`} />
+          <span className="text-[11px] uppercase tracking-widest text-white/85 truncate" style={shadow}>
+            {p.name}
+          </span>
+          {isFirst && (
+            <span className="text-[10px] font-bold text-amber-300 bg-amber-400/15 ring-1 ring-amber-300/40 rounded-full px-1.5 py-0.5 shrink-0">
+              1st
+            </span>
+          )}
+          {isTurn && (
+            <span className="flex items-center gap-1 text-[10px] font-bold text-sky-200 bg-sky-400/15 ring-1 ring-sky-300/40 rounded-full px-1.5 py-0.5 tabular-nums shrink-0">
+              <Hourglass size={10} /> {fmtMs(turnMs)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {freshDelta !== 0 && (
+            <span
+              className={`text-base font-bold ${freshDelta > 0 ? "text-emerald-300" : "text-rose-300"}`}
+              style={shadow}
+            >
+              {freshDelta > 0 ? `+${freshDelta}` : freshDelta}
+            </span>
+          )}
+          <div
+            key={p.life}
+            className="mtg-pop font-black tabular-nums leading-none tracking-tight"
+            style={{ fontSize: "clamp(2.25rem, 14vh, 4rem)", textShadow: "0 3px 16px rgba(0,0,0,.9)" }}
+          >
+            {p.life}
+          </div>
+        </div>
+        {(anyLethal || counterChips.length > 0) && (
+          <div className="flex flex-wrap justify-center gap-1 pointer-events-auto">
+            {anyLethal && (
+              <button
+                onClick={onOpenCmd}
+                className="flex items-center gap-1 h-7 px-2 rounded-lg ring-1 text-[10px] font-bold bg-rose-600/90 ring-rose-300/70"
+              >
+                <Skull size={11} /> 21+
+              </button>
+            )}
+            {counterChips.map((c) => (
+              <button
+                key={c.k}
+                onClick={onOpenOptions}
+                className={`flex items-center gap-1 h-7 px-1.5 rounded-lg ring-1 text-[10px] font-bold ${
+                  c.lethal ? "bg-rose-600/90 ring-rose-300/70" : "bg-black/55 ring-white/20"
+                }`}
+              >
+                <span>{c.abbr}</span>
+                <span className="tabular-nums">{c.v}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Compact corners: crown, options, commander damage */}
+      <button
+        onClick={onMonarch}
+        aria-label={isMonarch ? "Remove Monarch" : "Make Monarch"}
+        className={`absolute top-1.5 left-1.5 z-20 h-10 w-10 rounded-full ring-1 backdrop-blur flex items-center justify-center ${
+          isMonarch ? "bg-amber-400/90 ring-amber-200 text-slate-950" : "bg-black/45 ring-white/20"
+        }`}
+      >
+        <Crown size={17} className={isMonarch ? "" : "text-white/50"} />
+      </button>
+      <button
+        onClick={onOpenOptions}
+        aria-label="Player options"
+        className="absolute top-1.5 right-1.5 z-20 h-10 w-10 rounded-full bg-black/45 ring-1 ring-white/20 backdrop-blur flex items-center justify-center"
+      >
+        <Settings size={17} className="text-white/85" />
+      </button>
+      <button
+        onClick={onOpenCmd}
+        aria-label="Commander damage"
+        className="absolute bottom-1.5 right-1.5 z-20 h-10 w-10 rounded-full bg-black/45 ring-1 ring-white/20 backdrop-blur flex items-center justify-center"
+      >
+        <Swords size={17} className={anyLethal ? "text-rose-400" : "text-white/70"} />
+      </button>
+
+      {/* Eliminated overlay (compact) */}
+      {p.eliminated && (
+        <div
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center mtg-fade"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(56,0,8,.55) 0%, rgba(0,0,0,.9) 78%)",
+          }}
+        >
+          <div className="mtg-stamp flex flex-col items-center gap-1">
+            <Skull
+              size={30}
+              className="text-rose-500"
+              style={{ filter: "drop-shadow(0 0 12px rgba(244,63,94,.6))" }}
+            />
+            <div
+              className="font-black uppercase text-rose-400 tracking-[0.25em] pl-[0.25em] text-center"
+              style={{ fontSize: "12px", textShadow: "0 0 16px rgba(244,63,94,.5)" }}
+            >
+              Eliminated
+            </div>
+          </div>
+          <button
+            onClick={onRestore}
+            className="mt-1.5 h-9 px-4 rounded-full bg-white/10 ring-1 ring-white/20 text-xs text-white/75"
+          >
+            Restore
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The tabletop tile. iPad-only — phones render PhonePanel instead, so this
+// component never needs phone-size compromises.
 function PlayerPanel({
   p, flipped, cols, spotlight, isFirst, isMonarch, isTurn, turnMs,
-  freshDelta, seatRows, counterChips, variant = "table",
+  freshDelta, seatRows, counterChips,
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
   const pal = palOf(p.color);
   const realCmds = p.commanders.filter((c) => !c.placeholder);
   const primaryCmd = realCmds.find((c) => c.art) || realCmds[0];
-  // Phone rows are short and wide; everything else keys off column count.
-  const lifeSize = variant === "col"
-    ? "min(11vh, 21vw, 6rem)"
-    : cols === 1 ? "min(21vh, 24vw, 10rem)"
+  const lifeSize =
+    cols === 1 ? "min(21vh, 24vw, 10rem)"
     : cols === 2 ? "min(16vh, 15vw, 8.5rem)"
     : "min(14vh, 10.5vw, 7rem)";
-  const cellSize =
-    variant === "table" ? (cols < 3 ? "lg" : "md")
-    : variant === "col" ? "md"
-    : "sm";
-  const bigElim = variant === "table" ? cols < 3 : variant === "col";
-  const shadow = { textShadow: "0 1px 6px rgba(0,0,0,.9)" };
 
   return (
     <div
@@ -1204,74 +1345,6 @@ function PlayerPanel({
       )}
 
       {/* Readout — never intercepts touches (except mini-map & chips) */}
-      {variant === "row" ? (
-        <div className="absolute inset-0 pointer-events-none flex items-center gap-3 pl-16 pr-14">
-          {/* Identity */}
-          <div className="flex flex-col items-start min-w-0 flex-1 gap-0.5">
-            <div className="flex items-center gap-1.5 max-w-full">
-              <span className={`h-2.5 w-2.5 rounded-full ${pal.dot} shrink-0`} />
-              <span className="text-xs uppercase tracking-widest text-white/85 truncate" style={shadow}>
-                {p.name}
-              </span>
-              {isFirst && (
-                <span className="text-[10px] font-bold text-amber-300 bg-amber-400/15 ring-1 ring-amber-300/40 rounded-full px-1.5 py-0.5 shrink-0">
-                  1st
-                </span>
-              )}
-              {isTurn && (
-                <span className="flex items-center gap-1 text-[10px] font-bold text-sky-200 bg-sky-400/15 ring-1 ring-sky-300/40 rounded-full px-1.5 py-0.5 tabular-nums shrink-0">
-                  <Hourglass size={10} /> {fmtMs(turnMs)}
-                </span>
-              )}
-            </div>
-            {realCmds.length > 0 && (
-              <div className="mtg-serif italic text-[10px] text-white/75 truncate max-w-full" style={shadow}>
-                {realCmds.map((c) => c.name).join(" · ")}
-              </div>
-            )}
-            {counterChips.length > 0 && (
-              <div className="flex flex-wrap gap-1 pointer-events-auto">
-                {counterChips.map((c) => (
-                  <button
-                    key={c.k}
-                    onClick={onOpenOptions}
-                    className={`flex items-center gap-1 h-7 px-1.5 rounded-lg ring-1 text-[10px] font-bold ${
-                      c.lethal ? "bg-rose-600/90 ring-rose-300/70" : "bg-black/55 ring-white/20"
-                    }`}
-                  >
-                    <span>{c.abbr}</span>
-                    <span className="tabular-nums">{c.v}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Life */}
-          <div className="flex items-center gap-2 shrink-0">
-            {freshDelta !== 0 && (
-              <span className={`text-base font-bold ${freshDelta > 0 ? "text-emerald-300" : "text-rose-300"}`} style={shadow}>
-                {freshDelta > 0 ? `+${freshDelta}` : freshDelta}
-              </span>
-            )}
-            <div
-              key={p.life}
-              className="mtg-pop font-black tabular-nums leading-none tracking-tight"
-              style={{ fontSize: "clamp(1.9rem, 11vh, 3rem)", textShadow: "0 3px 16px rgba(0,0,0,.9)" }}
-            >
-              {p.life}
-            </div>
-          </div>
-
-          {/* Seat strip */}
-          <div className="shrink-0 flex flex-wrap justify-end items-center gap-1 pointer-events-auto max-w-[42%]">
-            {seatRows.flat().map((o) => (
-              <MiniCell key={o.id} o={o} viewer={p} size="sm"
-                onOpenCmd={onOpenCmd} onOpenOptions={onOpenOptions} />
-            ))}
-          </div>
-        </div>
-      ) : (
       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-between py-2 px-14">
         <div className="flex items-center gap-2 max-w-full">
           <span className={`h-2.5 w-2.5 rounded-full ${pal.dot} shrink-0`} />
@@ -1327,7 +1400,7 @@ function PlayerPanel({
                     key={o.id}
                     o={o}
                     viewer={p}
-                    size={cellSize}
+                    size={cols < 3 ? "lg" : "md"}
                     onOpenCmd={onOpenCmd}
                     onOpenOptions={onOpenOptions}
                   />
@@ -1356,7 +1429,6 @@ function PlayerPanel({
           )}
         </div>
       </div>
-      )}
 
       {/* Corner controls: crown top-left, options top-right. Commander
           damage opens from the mini-map cells. */}
@@ -1392,7 +1464,7 @@ function PlayerPanel({
             <div className="relative flex items-center justify-center">
               <span className="absolute -inset-7 rounded-full bg-rose-600/35 blur-2xl mtg-elim-pulse" />
               <Skull
-                size={bigElim ? 56 : variant === "row" ? 34 : 44}
+                size={cols < 3 ? 56 : 44}
                 className="relative text-rose-500"
                 style={{ filter: "drop-shadow(0 0 16px rgba(244,63,94,.6))" }}
               />
@@ -1400,19 +1472,17 @@ function PlayerPanel({
             <div
               className="font-black uppercase text-rose-400 tracking-[0.3em] pl-[0.3em] text-center"
               style={{
-                fontSize: bigElim ? "clamp(16px,2.4vw,24px)" : "clamp(12px,1.8vw,18px)",
+                fontSize: cols < 3 ? "clamp(16px,2.4vw,24px)" : "clamp(13px,1.8vw,18px)",
                 textShadow: "0 0 20px rgba(244,63,94,.5), 0 2px 10px rgba(0,0,0,.9)",
               }}
             >
               Eliminated
             </div>
-            {variant !== "row" && (
-              <div className="text-xs uppercase tracking-widest text-white/45">{p.name}</div>
-            )}
+            <div className="text-xs uppercase tracking-widest text-white/45">{p.name}</div>
           </div>
           <button
             onClick={onRestore}
-            className={`${variant === "row" ? "mt-1.5 h-9" : "mt-4 h-10"} px-5 rounded-full bg-white/10 ring-1 ring-white/20 text-sm text-white/75`}
+            className="mt-4 h-10 px-5 rounded-full bg-white/10 ring-1 ring-white/20 text-sm text-white/75"
           >
             Restore
           </button>
@@ -1869,19 +1939,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   // so a phone held in portrait gets the whole table rotated 90° — effective
   // dimensions swap and the landscape row layout applies either way.
   const simulateLand = vp.w < 520 && vp.h > vp.w;
-  const effW = simulateLand ? vp.h : vp.w;
-  const effH = simulateLand ? vp.w : vp.h;
-  const phone = effW < 520 && effH > effW; // no longer reachable on phones; kept for odd viewports
-  const phoneLand = effH < 520 && effW >= effH;
-  const anyPhone = phone || phoneLand;
-  const landRows = useMemo(() => {
-    if (!phoneLand) return [];
-    if (game.players.length <= 3) return game.players.map((p) => [p]);
-    const rows = [];
-    for (let i = 0; i < game.players.length; i += 2)
-      rows.push(game.players.slice(i, i + 2));
-    return rows;
-  }, [phoneLand, game.players]);
+  const anyPhone = simulateLand || (vp.h < 520 && vp.w >= vp.h);
 
   // Offer the first-player roll only while the game is untouched — no modal,
   // just a hub button that retires itself once play begins.
@@ -1921,16 +1979,15 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
     tick();
   };
 
-  const renderBank = (players, flipped, variant = "table") => {
+  const renderBank = (players, flipped) => {
     const cols = players.length;
     return (
-      <div className={`flex-1 flex ${variant === "col" ? "flex-col" : ""} gap-1.5 min-h-0`}>
+      <div className="flex-1 flex gap-1.5 min-h-0">
         {players.map((p) => (
           <PlayerPanel
             key={p.id}
             p={p}
-            variant={variant}
-            flipped={variant === "table" ? flipped : false}
+            flipped={flipped}
             cols={cols}
             spotlight={spot === p.id}
             isFirst={game.firstPlayerId === p.id}
@@ -1938,7 +1995,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
             isTurn={turns.enabled && turns.activeId === p.id}
             turnMs={turns.startedTs ? Math.max(0, now - turns.startedTs) : 0}
             freshDelta={freshFor(p.id)}
-            seatRows={variant === "table" ? seatRows : [game.players]}
+            seatRows={seatRows}
             counterChips={counterChipsFor(p)}
             onLife={(d) => adjustLife(p.id, d)}
             onOpenCmd={() => setUi((u) => ({ ...u, cmdFor: p.id }))}
@@ -1956,6 +2013,37 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
       </div>
     );
   };
+
+  // Phone rows: same clockwise banks as the tablet, simpler tiles, no flip.
+  const renderPhoneRow = (players) => (
+    <div className="flex-1 flex gap-1.5 min-h-0">
+      {players.map((p) => (
+        <PhonePanel
+          key={p.id}
+          p={p}
+          spotlight={spot === p.id}
+          isFirst={game.firstPlayerId === p.id}
+          isMonarch={game.monarchId === p.id}
+          isTurn={turns.enabled && turns.activeId === p.id}
+          turnMs={turns.startedTs ? Math.max(0, now - turns.startedTs) : 0}
+          freshDelta={freshFor(p.id)}
+          counterChips={counterChipsFor(p)}
+          anyLethal={Object.values(p.cmdDamage).some((v) => v >= 21)}
+          onLife={(d) => adjustLife(p.id, d)}
+          onOpenCmd={() => setUi((u) => ({ ...u, cmdFor: p.id }))}
+          onOpenOptions={() => setUi((u) => ({ ...u, optionsFor: p.id }))}
+          onMonarch={() =>
+            dispatch({
+              type: "MONARCH",
+              playerId: game.monarchId === p.id ? null : p.id,
+              ts: Date.now(),
+            })
+          }
+          onRestore={() => dispatch({ type: "ELIM", playerId: p.id, ts: Date.now() })}
+        />
+      ))}
+    </div>
+  );
 
   const winnerName = (wid) => {
     const w = game.players.find((p) => p.id === wid);
@@ -1980,19 +2068,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           : undefined
       }
     >
-      {phoneLand ? (
-        <div className="flex-1 flex flex-col gap-1.5 min-h-0">
-          {landRows.map((row, i) => (
-            <div key={i} className="flex-1 flex min-h-0">
-              {renderBank(row, false, "row")}
-            </div>
-          ))}
-        </div>
-      ) : phone ? (
-        renderBank(game.players, false, "col")
-      ) : (
-        renderBank(far, true)
-      )}
+      {anyPhone ? renderPhoneRow(far) : renderBank(far, true)}
 
       {/* Center hub — below the phone stack, or between the tablet banks so
           it never overlaps the panels' corner controls */}
@@ -2048,7 +2124,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         </div>
       </div>
 
-      {!anyPhone && renderBank(near, false)}
+      {anyPhone ? renderPhoneRow(near) : renderBank(near, false)}
 
       {/* First-player roll flow */}
       {ui.roll === "running" && (
@@ -2084,11 +2160,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         <CmdDamageSheet
           game={game}
           defenderId={ui.cmdFor}
-          seatRows={
-            anyPhone
-              ? game.players.filter((pl) => pl.id !== ui.cmdFor).map((pl) => [pl])
-              : seatRows
-          }
+          seatRows={seatRows}
           flip={!anyPhone && farIds.has(ui.cmdFor)}
           applyToLife={prefs.applyToLife}
           setApplyToLife={(v) => setPrefs((p) => ({ ...p, applyToLife: v }))}
