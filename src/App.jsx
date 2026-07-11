@@ -3,7 +3,7 @@ import {
   Plus, Minus, X, Undo2, History, Settings, Skull,
   Dices, Search, RotateCcw, Loader2, Crown, Star, Pause, Play,
   SkipForward, Hourglass, Image as ImageIcon, Timer as TimerIcon,
-  ChevronLeft
+  ChevronLeft, BarChart3
 } from "lucide-react";
 
 /* =====================================================================
@@ -210,6 +210,7 @@ function buildGame(cfg) {
       cmdDamage: {},
       counters: {},
       statsDealt: { total: 0, byCmd: {}, byDefender: {} },
+      stats: { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 },
     };
   });
   return {
@@ -239,6 +240,7 @@ function gameReducer(state, a) {
         players: (s.players || []).map((p) => ({
           counters: {},
           statsDealt: { total: 0, byCmd: {}, byDefender: {} },
+          stats: { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 },
           ...p,
         })),
         undo: s.undo || [],
@@ -263,11 +265,29 @@ function gameReducer(state, a) {
         hist.push({ id: uid(), kind: "life", playerId: a.playerId,
                     delta: a.delta, from, to, ts: a.ts });
       }
+      // The coalesced entry's running delta measures the whole swing, so
+      // "biggest hit" reflects e.g. -7 from one burst rather than 7 × -1.
+      const entry = hist[hist.length - 1];
       return {
         ...state,
         undo,
         history: capHist(hist),
-        players: state.players.map((x) => (x.id === a.playerId ? { ...x, life: to } : x)),
+        players: state.players.map((x) => {
+          if (x.id !== a.playerId) return x;
+          const s = x.stats || { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 };
+          return {
+            ...x,
+            life: to,
+            stats: {
+              ...s,
+              gained: s.gained + (a.delta > 0 ? a.delta : 0),
+              lost: s.lost + (a.delta < 0 ? -a.delta : 0),
+              biggestHit: entry.delta < 0
+                ? Math.max(s.biggestHit, -entry.delta)
+                : s.biggestHit,
+            },
+          };
+        }),
       };
     }
 
@@ -296,14 +316,31 @@ function gameReducer(state, a) {
       // Attribute dealt damage to the commander's owner for the stats view.
       const owner = state.players.find((pl) =>
         pl.commanders.some((c) => c.id === a.cmdId));
+      const entry = hist[hist.length - 1];
       return {
         ...state,
         undo,
         history: capHist(hist),
         players: state.players.map((x) => {
           let y = x;
-          if (x.id === a.defenderId)
-            y = { ...y, life: lifeTo, cmdDamage: { ...y.cmdDamage, [a.cmdId]: toCmd } };
+          if (x.id === a.defenderId) {
+            const s = y.stats || { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 };
+            y = {
+              ...y,
+              life: lifeTo,
+              cmdDamage: { ...y.cmdDamage, [a.cmdId]: toCmd },
+              stats: {
+                ...s,
+                // Negative deltas here are corrections, so they back the
+                // tallies out instead of counting as healing.
+                cmdTaken: Math.max(0, s.cmdTaken + d),
+                lost: a.applyToLife ? Math.max(0, s.lost + d) : s.lost,
+                biggestHit: a.applyToLife && entry.delta > 0
+                  ? Math.max(s.biggestHit, entry.delta)
+                  : s.biggestHit,
+              },
+            };
+          }
           if (owner && x.id === owner.id && owner.id !== a.defenderId) {
             const sd = y.statsDealt || { total: 0, byCmd: {}, byDefender: {} };
             y = {
@@ -470,6 +507,7 @@ function gameReducer(state, a) {
         players: state.players.map((p) => ({
           ...p, life: state.startingLife, eliminated: false, cmdDamage: {}, counters: {},
           statsDealt: { total: 0, byCmd: {}, byDefender: {} },
+          stats: { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 },
         })),
       };
 
@@ -1517,6 +1555,57 @@ function CounterRow({ def, value, onDelta }) {
   );
 }
 
+function StatCell({ v, label, cls }) {
+  return (
+    <div className="rounded-lg bg-white/5 py-1.5">
+      <div className={`text-lg font-black tabular-nums leading-tight ${cls || ""}`}>{v}</div>
+      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function StatsSheet({ game, onClose }) {
+  return (
+    <Modal onClose={onClose}>
+      <SheetHeader title="Player stats" onClose={onClose} />
+      <div className="px-4 pb-4 space-y-2">
+        {game.players.map((p) => {
+          const s = p.stats || { gained: 0, lost: 0, biggestHit: 0, cmdTaken: 0 };
+          const dealt = (p.statsDealt && p.statsDealt.total) || 0;
+          const net = p.life - game.startingLife;
+          return (
+            <div key={p.id} className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${palOf(p.color).dot}`} />
+                <span className="font-semibold flex-1 truncate">
+                  {p.name}
+                  {p.eliminated && <span className="text-rose-400 text-xs ml-2">eliminated</span>}
+                </span>
+                <span className="text-xl font-black tabular-nums">{p.life}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                <StatCell v={s.lost} label="Dmg taken" cls="text-rose-300" />
+                <StatCell v={s.gained} label="Healed" cls="text-emerald-300" />
+                <StatCell
+                  v={net > 0 ? `+${net}` : net}
+                  label="Net life"
+                  cls={net > 0 ? "text-emerald-300" : net < 0 ? "text-rose-300" : ""}
+                />
+                <StatCell v={dealt} label="Cmd dealt" />
+                <StatCell v={s.cmdTaken} label="Cmd taken" />
+                <StatCell v={s.biggestHit ? `-${s.biggestHit}` : "—"} label="Biggest hit" />
+              </div>
+            </div>
+          );
+        })}
+        <div className="text-xs text-slate-500">
+          Tallies run for the current game and reset with it.
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function OptionsSheet({ player, isMonarch, flip, onMonarch, onCounter, onEliminate, onClose }) {
   return (
     <Modal onClose={onClose} flip={flip}>
@@ -1558,7 +1647,7 @@ function OptionsSheet({ player, isMonarch, flip, onMonarch, onCounter, onElimina
   );
 }
 
-function MenuSheet({ game, dispatch, onRoll, onReset, onNewGame, onClose }) {
+function MenuSheet({ game, dispatch, onStats, onRoll, onReset, onNewGame, onClose }) {
   const now = useNow(true);
   const t = game.timer || { accum: 0, runningSince: null };
   const running = !!t.runningSince;
@@ -1566,7 +1655,6 @@ function MenuSheet({ game, dispatch, onRoll, onReset, onNewGame, onClose }) {
   const liveTotal = (pid) =>
     ((tr.totals && tr.totals[pid]) || 0) +
     (tr.enabled && tr.activeId === pid && tr.startedTs ? Math.max(0, now - tr.startedTs) : 0);
-  const dealt = game.players.filter((p) => p.statsDealt && p.statsDealt.total > 0);
 
   return (
     <Modal onClose={onClose}>
@@ -1623,22 +1711,10 @@ function MenuSheet({ game, dispatch, onRoll, onReset, onNewGame, onClose }) {
           )}
         </div>
 
-        {/* Commander damage dealt */}
-        {dealt.length > 0 && (
-          <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-3">
-            <div className="text-xs uppercase tracking-widest text-slate-400 mb-1">
-              Commander damage dealt
-            </div>
-            {dealt.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 text-sm py-0.5">
-                <span className={`h-2 w-2 rounded-full shrink-0 ${palOf(p.color).dot}`} />
-                <span className="flex-1 truncate">{p.name}</span>
-                <span className="tabular-nums text-slate-300">{p.statsDealt.total}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
+        <button onClick={onStats}
+          className="w-full h-12 rounded-xl bg-white/5 ring-1 ring-white/15 flex items-center justify-center gap-2 font-semibold">
+          <BarChart3 size={18} /> Player stats
+        </button>
         <button onClick={() => { onClose(); onRoll(); }}
           className="w-full h-12 rounded-xl bg-white/5 ring-1 ring-white/15 flex items-center justify-center gap-2 font-semibold">
           <Dices size={18} /> Decide who goes first
@@ -1921,10 +1997,12 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         />
       )}
       {ui.history && <HistorySheet game={game} onClose={() => setUi((u) => ({ ...u, history: false }))} />}
+      {ui.stats && <StatsSheet game={game} onClose={() => setUi((u) => ({ ...u, stats: false }))} />}
       {ui.menu && (
         <MenuSheet
           game={game}
           dispatch={dispatch}
+          onStats={() => setUi((u) => ({ ...u, menu: false, stats: true }))}
           onRoll={() => setUi((u) => ({ ...u, menu: false, roll: "prompt" }))}
           onReset={() =>
             setUi((u) => ({
