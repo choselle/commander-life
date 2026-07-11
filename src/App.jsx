@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useReducer, useMemo, useCallback } from "react";
 import {
-  Plus, Minus, X, Undo2, History, Settings, Swords, Skull,
+  Plus, Minus, X, Undo2, History, Settings, Skull,
   Dices, Search, RotateCcw, Loader2, Crown, Star, Pause, Play,
   SkipForward, Hourglass, Image as ImageIcon, Timer as TimerIcon,
   ChevronLeft
@@ -1124,7 +1124,7 @@ function MiniCell({ o, viewer, big, onOpenCmd, onOpenOptions }) {
 
 function PlayerPanel({
   p, flipped, cols, spotlight, isFirst, isMonarch, isTurn, turnMs,
-  freshDelta, seatRows, counterChips, lethal,
+  freshDelta, seatRows, counterChips,
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
   const pal = palOf(p.color);
@@ -1237,13 +1237,18 @@ function PlayerPanel({
         </div>
       </div>
 
-      {/* Corner controls */}
+      {/* Corner controls: crown top-left, options top-right. Commander
+          damage opens from the mini-map cells. */}
       <button
-        onClick={onOpenCmd}
-        aria-label="Commander damage"
-        className="absolute top-2 left-2 z-20 h-12 w-12 rounded-full bg-black/45 ring-1 ring-white/20 backdrop-blur flex items-center justify-center"
+        onClick={onMonarch}
+        aria-label={isMonarch ? "Remove Monarch" : "Make Monarch"}
+        className={`absolute top-2 left-2 z-20 h-12 w-12 rounded-full ring-1 backdrop-blur flex items-center justify-center ${
+          isMonarch
+            ? "bg-amber-400/90 ring-amber-200 text-slate-950"
+            : "bg-black/45 ring-white/20"
+        }`}
       >
-        <Swords size={20} className={lethal ? "text-rose-400" : "text-white/85"} />
+        <Crown size={20} className={isMonarch ? "" : "text-white/50"} />
       </button>
       <button
         onClick={onOpenOptions}
@@ -1251,17 +1256,6 @@ function PlayerPanel({
         className="absolute top-2 right-2 z-20 h-12 w-12 rounded-full bg-black/45 ring-1 ring-white/20 backdrop-blur flex items-center justify-center"
       >
         <Settings size={20} className="text-white/85" />
-      </button>
-      <button
-        onClick={onMonarch}
-        aria-label={isMonarch ? "Remove Monarch" : "Make Monarch"}
-        className={`absolute bottom-2 left-2 z-20 h-12 w-12 rounded-full ring-1 backdrop-blur flex items-center justify-center ${
-          isMonarch
-            ? "bg-amber-400/90 ring-amber-200 text-slate-950"
-            : "bg-black/45 ring-white/20"
-        }`}
-      >
-        <Crown size={20} className={isMonarch ? "" : "text-white/50"} />
       </button>
 
       {/* Eliminated overlay */}
@@ -1737,7 +1731,6 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
             freshDelta={freshFor(p.id)}
             seatRows={seatRows}
             counterChips={counterChipsFor(p)}
-            lethal={Object.values(p.cmdDamage).some((v) => v >= 21)}
             onLife={(d) => adjustLife(p.id, d)}
             onOpenCmd={() => setUi((u) => ({ ...u, cmdFor: p.id }))}
             onOpenOptions={() => setUi((u) => ({ ...u, optionsFor: p.id }))}
