@@ -1170,7 +1170,7 @@ function MiniCell({ o, viewer, size = "md", onOpenCmd, onOpenOptions }) {
 // deliberately separate from PlayerPanel so the two designs never share
 // layout compromises.
 function PhonePanel({
-  p, spotlight, isFirst, isMonarch, isTurn, turnMs, freshDelta,
+  p, flipped, spotlight, isFirst, isMonarch, isTurn, turnMs, freshDelta,
   counterChips, anyLethal,
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
@@ -1181,8 +1181,8 @@ function PhonePanel({
   return (
     <div
       className={`relative flex-1 min-w-0 overflow-hidden rounded-xl ring-1 ring-white/10 ${
-        spotlight ? "mtg-spot" : isMonarch ? "mtg-crowned" : ""
-      }`}
+        flipped ? "rotate-180" : ""
+      } ${spotlight ? "mtg-spot" : isMonarch ? "mtg-crowned" : ""}`}
     >
       <ArtBackground cmd={artCmd} pal={pal} eliminated={p.eliminated} />
 
@@ -1935,11 +1935,8 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   // Tick once per second for the hub timer and the active-turn chip.
   const now = useNow(true);
 
-  // Phones render landscape-only. iOS web apps can't truly lock orientation,
-  // so a phone held in portrait gets the whole table rotated 90° — effective
-  // dimensions swap and the landscape row layout applies either way.
-  const simulateLand = vp.w < 520 && vp.h > vp.w;
-  const anyPhone = simulateLand || (vp.h < 520 && vp.w >= vp.h);
+  // Phone-sized screens get the simplified tiles in either orientation.
+  const anyPhone = Math.min(vp.w, vp.h) < 520;
 
   // Offer the first-player roll only while the game is untouched — no modal,
   // just a hub button that retires itself once play begins.
@@ -2014,13 +2011,15 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
     );
   };
 
-  // Phone rows: same clockwise banks as the tablet, simpler tiles, no flip.
-  const renderPhoneRow = (players) => (
+  // Phone rows: same clockwise banks as the tablet, simpler tiles; the far
+  // bank flips so numbers face the players seated across.
+  const renderPhoneRow = (players, flipped) => (
     <div className="flex-1 flex gap-1.5 min-h-0">
       {players.map((p) => (
         <PhonePanel
           key={p.id}
           p={p}
+          flipped={flipped}
           spotlight={spot === p.id}
           isFirst={game.firstPlayerId === p.id}
           isMonarch={game.monarchId === p.id}
@@ -2052,23 +2051,8 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   const optionsPlayer = game.players.find((p) => p.id === ui.optionsFor);
 
   return (
-    <div
-      className={`${simulateLand ? "" : "h-full"} flex flex-col gap-1.5 p-1.5`}
-      style={
-        simulateLand
-          ? {
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100vh",
-              height: "100vw",
-              transform: "rotate(90deg) translateY(-100%)",
-              transformOrigin: "top left",
-            }
-          : undefined
-      }
-    >
-      {anyPhone ? renderPhoneRow(far) : renderBank(far, true)}
+    <div className="h-full flex flex-col gap-1.5 p-1.5">
+      {anyPhone ? renderPhoneRow(far, true) : renderBank(far, true)}
 
       {/* Center hub — below the phone stack, or between the tablet banks so
           it never overlaps the panels' corner controls */}
@@ -2124,7 +2108,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         </div>
       </div>
 
-      {anyPhone ? renderPhoneRow(near) : renderBank(near, false)}
+      {anyPhone ? renderPhoneRow(near, false) : renderBank(near, false)}
 
       {/* First-player roll flow */}
       {ui.roll === "running" && (
@@ -2161,7 +2145,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           game={game}
           defenderId={ui.cmdFor}
           seatRows={seatRows}
-          flip={!anyPhone && farIds.has(ui.cmdFor)}
+          flip={farIds.has(ui.cmdFor)}
           applyToLife={prefs.applyToLife}
           setApplyToLife={(v) => setPrefs((p) => ({ ...p, applyToLife: v }))}
           dispatch={dispatch}
@@ -2172,7 +2156,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
         <OptionsSheet
           player={optionsPlayer}
           isMonarch={game.monarchId === optionsPlayer.id}
-          flip={!anyPhone && farIds.has(optionsPlayer.id)}
+          flip={farIds.has(optionsPlayer.id)}
           onMonarch={() =>
             dispatch({
               type: "MONARCH",
