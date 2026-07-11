@@ -1865,11 +1865,14 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   // Tick once per second for the hub timer and the active-turn chip.
   const now = useNow(true);
 
-  // A phone in one player's hand: portrait stacks unrotated rows with
-  // stacked content; landscape uses short wide rows (2-up for 4+) with
-  // horizontal content. Anything larger keeps the tabletop layout.
-  const phone = vp.w < 520 && vp.h > vp.w;
-  const phoneLand = vp.h < 520 && vp.w >= vp.h;
+  // Phones render landscape-only. iOS web apps can't truly lock orientation,
+  // so a phone held in portrait gets the whole table rotated 90° — effective
+  // dimensions swap and the landscape row layout applies either way.
+  const simulateLand = vp.w < 520 && vp.h > vp.w;
+  const effW = simulateLand ? vp.h : vp.w;
+  const effH = simulateLand ? vp.w : vp.h;
+  const phone = effW < 520 && effH > effW; // no longer reachable on phones; kept for odd viewports
+  const phoneLand = effH < 520 && effW >= effH;
   const anyPhone = phone || phoneLand;
   const landRows = useMemo(() => {
     if (!phoneLand) return [];
@@ -1961,7 +1964,22 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
   const optionsPlayer = game.players.find((p) => p.id === ui.optionsFor);
 
   return (
-    <div className="h-full flex flex-col gap-1.5 p-1.5">
+    <div
+      className={`${simulateLand ? "" : "h-full"} flex flex-col gap-1.5 p-1.5`}
+      style={
+        simulateLand
+          ? {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100vh",
+              height: "100vw",
+              transform: "rotate(90deg) translateY(-100%)",
+              transformOrigin: "top left",
+            }
+          : undefined
+      }
+    >
       {phoneLand ? (
         <div className="flex-1 flex flex-col gap-1.5 min-h-0">
           {landRows.map((row, i) => (
