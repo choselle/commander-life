@@ -1753,11 +1753,55 @@ function StatsSheet({ game, onClose }) {
   );
 }
 
-function OptionsSheet({ player, isMonarch, flip, onMonarch, onCounter, onEliminate, onClose }) {
+// Chunk buttons + direct entry for big life swings. Deltas go through the
+// normal LIFE action so undo, history, and stats all see them.
+function LifeSetRow({ life, onLife }) {
+  const [val, setVal] = useState(String(life));
+  useEffect(() => { setVal(String(life)); }, [life]);
+  const commit = () => {
+    const n = parseInt(val, 10);
+    if (!Number.isNaN(n) && n !== life) onLife(n - life);
+    else setVal(String(life));
+  };
+  const chunk = (d, label) => (
+    <button
+      key={label}
+      onClick={() => onLife(d)}
+      className="h-11 flex-1 rounded-xl bg-white/10 ring-1 ring-white/15 text-sm font-bold"
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-2">
+      <div className="flex items-center gap-1.5">
+        {chunk(-10, "−10")}
+        {chunk(-5, "−5")}
+        <input
+          value={val}
+          onChange={(e) => setVal(e.target.value.replace(/[^0-9-]/g, ""))}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          inputMode="numeric"
+          aria-label="Set life total"
+          className="w-20 h-11 bg-black/30 ring-1 ring-white/20 rounded-xl text-center text-2xl font-black tabular-nums outline-none focus:ring-2 focus:ring-amber-300/60"
+        />
+        {chunk(5, "+5")}
+        {chunk(10, "+10")}
+      </div>
+      <div className="text-xs text-slate-500 mt-1.5 px-1">
+        Tap a chunk, or type an exact total and tap away.
+      </div>
+    </div>
+  );
+}
+
+function OptionsSheet({ player, isMonarch, flip, onLife, onMonarch, onCounter, onEliminate, onClose }) {
   return (
     <Modal onClose={onClose} flip={flip}>
       <SheetHeader title={player.name} onClose={onClose} />
       <div className="px-4 pb-4 space-y-2">
+        <LifeSetRow life={player.life} onLife={onLife} />
         <button
           onClick={onMonarch}
           className={`w-full h-12 rounded-xl ring-1 flex items-center justify-center gap-2 font-semibold ${
@@ -2157,6 +2201,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           player={optionsPlayer}
           isMonarch={game.monarchId === optionsPlayer.id}
           flip={farIds.has(optionsPlayer.id)}
+          onLife={(d) => adjustLife(optionsPlayer.id, d)}
           onMonarch={() =>
             dispatch({
               type: "MONARCH",
