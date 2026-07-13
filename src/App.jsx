@@ -571,14 +571,36 @@ function usePressRepeat(step) {
 }
 
 function useViewport() {
-  const [v, setV] = useState({ w: window.innerWidth, h: window.innerHeight });
+  // iOS can report stale or zeroed window dimensions during app launch and
+  // fires orientationchange before the new size is readable. Take the widest
+  // credible source and re-measure until values settle, so a bad first read
+  // can't lock in the wrong layout.
+  const read = () => ({
+    w: Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0),
+    h: Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0),
+  });
+  const [v, setV] = useState(read);
   useEffect(() => {
-    const f = () => setV({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", f);
-    window.addEventListener("orientationchange", f);
+    let timers = [];
+    const update = () =>
+      setV((prev) => {
+        const next = read();
+        return prev.w === next.w && prev.h === next.h ? prev : next;
+      });
+    const settle = () => {
+      timers.forEach(clearTimeout);
+      update();
+      timers = [setTimeout(update, 120), setTimeout(update, 500)];
+    };
+    window.addEventListener("resize", settle);
+    window.addEventListener("orientationchange", settle);
+    window.visualViewport?.addEventListener("resize", settle);
+    settle(); // initial mount may also have read too early
     return () => {
-      window.removeEventListener("resize", f);
-      window.removeEventListener("orientationchange", f);
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", settle);
+      window.removeEventListener("orientationchange", settle);
+      window.visualViewport?.removeEventListener("resize", settle);
     };
   }, []);
   return v;
