@@ -27,8 +27,14 @@ import {
 const CSS = `
 .mtg-root{
   -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
-  padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);
-  padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);
+  /* Full inset up top and on the sides: the camera island / notch really
+     occludes content there. The bottom inset (34px on Face ID iPhones) is
+     mostly free space native apps draw under — keep only a 12px cushion
+     above the home indicator instead of reserving the whole strip. */
+  padding-top:env(safe-area-inset-top);
+  padding-right:env(safe-area-inset-right);
+  padding-bottom:min(env(safe-area-inset-bottom), 12px);
+  padding-left:env(safe-area-inset-left);
   font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 .mtg-root img{-webkit-user-drag:none;pointer-events:none}
