@@ -2284,6 +2284,30 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
 
 /* ---------------------------- 10. App shell --------------------------- */
 
+// iOS standalone mode occasionally leaves the visual viewport scrolled or
+// offset (after launch, rotation, or keyboard dismissal), which shows up as
+// dead space at an edge. Snap back to origin whenever the viewport shifts.
+function useViewportPin() {
+  useEffect(() => {
+    const reset = () => {
+      if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+    };
+    reset();
+    window.addEventListener("pageshow", reset);
+    window.addEventListener("focusout", reset);
+    window.addEventListener("orientationchange", reset);
+    window.visualViewport?.addEventListener("resize", reset);
+    window.visualViewport?.addEventListener("scroll", reset);
+    return () => {
+      window.removeEventListener("pageshow", reset);
+      window.removeEventListener("focusout", reset);
+      window.removeEventListener("orientationchange", reset);
+      window.visualViewport?.removeEventListener("resize", reset);
+      window.visualViewport?.removeEventListener("scroll", reset);
+    };
+  }, []);
+}
+
 export default function App() {
   const [phase, setPhase] = useState("loading"); // loading | setup | game
   const [game, dispatch] = useReducer(gameReducer, null);
@@ -2291,6 +2315,7 @@ export default function App() {
     recents: [], favorites: [], lastSetup: null, applyToLife: true,
   });
 
+  useViewportPin();
   useWakeLock(phase === "game");
 
   // Restore on mount: active game resumes straight to the table.

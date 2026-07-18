@@ -1,9 +1,19 @@
 @import "tailwindcss";
 
+/* Pin the document so iOS standalone mode can never pan or rubber-band the
+   webview — the app root tracks the screen exactly, and inner scrollers
+   (sheets, setup) scroll on their own. */
 html,
-body,
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 #root {
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 
 /* Match the app shell so orientation changes and overscroll never flash white */
