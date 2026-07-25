@@ -1198,7 +1198,7 @@ function MiniCell({ o, viewer, size = "md", onOpenCmd, onOpenOptions }) {
 // deliberately separate from PlayerPanel so the two designs never share
 // layout compromises.
 function PhonePanel({
-  p, flipped, spotlight, isFirst, isMonarch, isTurn, turnMs, freshDelta,
+  p, flipped, cols, spotlight, isFirst, isMonarch, isTurn, turnMs, freshDelta,
   counterChips, anyLethal,
   onLife, onOpenCmd, onOpenOptions, onMonarch, onRestore,
 }) {
@@ -1206,6 +1206,15 @@ function PhonePanel({
   const realCmds = p.commanders.filter((c) => !c.placeholder);
   const artCmd = realCmds.find((c) => c.art) || realCmds[0];
   const shadow = { textShadow: "0 1px 6px rgba(0,0,0,.9)" };
+  // A lone tile owns the full width of its row (2-player games, and the odd
+  // seat in 3/5-player ones), so the number can grow to fill it. The vw term
+  // keeps three digits inside the tap zones; the vh term keeps the readout
+  // from crowding the name and chips — and it's what governs in landscape,
+  // where the rows are short and wide.
+  const solo = cols === 1;
+  const lifeSize = solo
+    ? "clamp(2.25rem, min(19vh, 34vw), 8.5rem)"
+    : "clamp(2.25rem, 14vh, 4rem)";
   return (
     <div
       className={`relative flex-1 min-w-0 overflow-hidden rounded-xl ring-1 ring-white/10 ${
@@ -1225,7 +1234,7 @@ function PhonePanel({
       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-0.5 px-11">
         <div className="flex items-center gap-1.5 max-w-full">
           <span className={`h-2 w-2 rounded-full ${pal.dot} shrink-0`} />
-          <span className="text-[11px] uppercase tracking-widest text-white/85 truncate" style={shadow}>
+          <span className={`${solo ? "text-sm" : "text-[11px]"} uppercase tracking-widest text-white/85 truncate`} style={shadow}>
             {p.name}
           </span>
           {isFirst && (
@@ -1242,7 +1251,7 @@ function PhonePanel({
         <div className="flex items-center gap-2">
           {freshDelta !== 0 && (
             <span
-              className={`text-base font-bold ${freshDelta > 0 ? "text-emerald-300" : "text-rose-300"}`}
+              className={`${solo ? "text-2xl" : "text-base"} font-bold ${freshDelta > 0 ? "text-emerald-300" : "text-rose-300"}`}
               style={shadow}
             >
               {freshDelta > 0 ? `+${freshDelta}` : freshDelta}
@@ -1251,7 +1260,7 @@ function PhonePanel({
           <div
             key={p.life}
             className="mtg-pop font-black tabular-nums leading-none tracking-tight"
-            style={{ fontSize: "clamp(2.25rem, 14vh, 4rem)", textShadow: "0 3px 16px rgba(0,0,0,.9)" }}
+            style={{ fontSize: lifeSize, textShadow: "0 3px 16px rgba(0,0,0,.9)" }}
           >
             {p.life}
           </div>
@@ -2092,6 +2101,7 @@ function Table({ game, dispatch, prefs, setPrefs, onNewGame }) {
           key={p.id}
           p={p}
           flipped={flipped}
+          cols={players.length}
           spotlight={spot === p.id}
           isFirst={game.firstPlayerId === p.id}
           isMonarch={game.monarchId === p.id}
